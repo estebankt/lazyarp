@@ -19,6 +19,15 @@ pub fn render_log_pane(f: &mut Frame, state: &AppState, area: Rect) {
         ScanStatus::Idle => Span::styled(" [IDLE] ", Style::default().fg(Color::DarkGray)),
     };
 
+    let mode_tag = if state.passive_mode {
+        Span::styled(
+            " (passive) ",
+            Style::default().fg(Color::Cyan),
+        )
+    } else {
+        Span::raw("")
+    };
+
     let title = Line::from(vec![
         Span::raw(" lazyarp "),
         scan_indicator,
@@ -26,6 +35,7 @@ pub fn render_log_pane(f: &mut Frame, state: &AppState, area: Rect) {
             format!(" iface: {} ", state.interface_name),
             Style::default().fg(Color::Gray),
         ),
+        mode_tag,
     ]);
 
     let block = Block::default()

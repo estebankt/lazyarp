@@ -5,16 +5,23 @@ use pnet_datalink::{self, Channel, Config, MacAddr};
 use pnet_packet::arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket};
 use pnet_packet::ethernet::{EtherTypes, EthernetPacket, MutableEthernetPacket};
 use pnet_packet::Packet;
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
 const SWEEP_INTERVAL_SECS: u64 = 30;
 const LISTEN_DURATION_SECS: u64 = 3;
 const MISSED_SWEEPS_THRESHOLD: u8 = 2;
+const PASSIVE_PROBE_WAIT_SECS: u64 = 2;
+
+#[derive(Debug, Clone, Copy)]
+pub enum ScanMode {
+    Active,
+    Passive,
+}
 
 /// Main scanner loop — runs forever until the app exits.
-pub async fn run_scanner(iface: SelectedInterface, state: SharedState) {
+pub async fn run_scanner(iface: SelectedInterface, state: SharedState, mode: ScanMode) {
     // Clone the notify handle before entering the loop
     let rescan_notify = {
         let s = state.lock().await;
@@ -22,16 +29,22 @@ pub async fn run_scanner(iface: SelectedInterface, state: SharedState) {
     };
 
     loop {
-        // Run the actual ARP sweep in a blocking thread (pnet is sync)
-        let iface_clone = iface.clone();
-        let state_clone = Arc::clone(&state);
-        tokio::task::spawn_blocking(move || {
-            if let Err(e) = arp_sweep(iface_clone, state_clone) {
-                eprintln!("ARP sweep error: {e}");
+        match mode {
+            ScanMode::Active => {
+                let iface_clone = iface.clone();
+                let state_clone = Arc::clone(&state);
+                tokio::task::spawn_blocking(move || {
+                    if let Err(e) = arp_sweep(iface_clone, state_clone) {
+                        eprintln!("ARP sweep error: {e}");
+                    }
+                })
+                .await
+                .ok();
             }
-        })
-        .await
-        .ok();
+            ScanMode::Passive => {
+                passive_sweep(&iface, Arc::clone(&state)).await;
+            }
+        }
 
         // Wait for either the interval or a manual rescan trigger
         tokio::select! {
@@ -39,6 +52,72 @@ pub async fn run_scanner(iface: SelectedInterface, state: SharedState) {
             _ = rescan_notify.notified() => {
                 // Manual rescan requested via `r` key
             }
+        }
+    }
+}
+
+async fn passive_sweep(iface: &SelectedInterface, state: SharedState) {
+    let hosts = subnet_hosts(iface.ip, iface.prefix_len);
+    if hosts.is_empty() {
+        return;
+    }
+
+    {
+        let mut s = state.lock().await;
+        s.scan_status = crate::app::ScanStatus::Scanning;
+        s.sweep_count += 1;
+        let sweep = s.sweep_count;
+        s.push_log(format!(
+            "Sweep #{sweep} (passive) started on {} ({} hosts)",
+            iface.name,
+            hosts.len()
+        ));
+        for device in s.devices.values_mut() {
+            device.missed_sweeps += 1;
+            if device.missed_sweeps >= MISSED_SWEEPS_THRESHOLD {
+                device.status = DeviceStatus::Inactive;
+            }
+        }
+    }
+
+    udp_probe_subnet(&hosts).await;
+    tokio::time::sleep(Duration::from_secs(PASSIVE_PROBE_WAIT_SECS)).await;
+
+    let iface_name = iface.name.clone();
+    let entries = tokio::task::spawn_blocking(move || {
+        crate::network::arp_cache::read_arp_cache(&iface_name)
+    })
+    .await
+    .unwrap_or_default();
+
+    {
+        let mut s = state.lock().await;
+        for (src_ip, src_mac) in entries {
+            let vendor = lookup_vendor(&src_mac);
+            let entry = s.devices.entry(src_mac).or_insert_with(|| {
+                crate::app::Device::new(src_ip, src_mac, vendor.clone())
+            });
+            entry.ip = src_ip;
+            entry.status = DeviceStatus::Active;
+            entry.last_seen = chrono::Utc::now();
+            entry.missed_sweeps = 0;
+            if entry.vendor.is_none() {
+                entry.vendor = vendor;
+            }
+        }
+        s.clamp_selection();
+        s.scan_status = crate::app::ScanStatus::Done;
+        let count = s.devices.len();
+        s.push_log(format!("Passive sweep complete — {count} devices found"));
+    }
+}
+
+async fn udp_probe_subnet(hosts: &[Ipv4Addr]) {
+    if let Ok(socket) = tokio::net::UdpSocket::bind("0.0.0.0:0").await {
+        for host in hosts {
+            let addr = SocketAddr::new(IpAddr::V4(*host), 1);
+            // Fire and forget — ICMP port-unreachable responses are expected
+            let _ = socket.send_to(&[0u8], addr).await;
         }
     }
 }

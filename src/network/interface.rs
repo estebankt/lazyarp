@@ -71,7 +71,12 @@ pub fn check_permissions(iface: &NetworkInterface) -> Result<(), LazyarpError> {
 
     match channel(iface, config) {
         Ok(_) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+        Err(e)
+            if matches!(
+                e.kind(),
+                std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::NotFound
+            ) =>
+        {
             Err(LazyarpError::InsufficientPermissions)
         }
         Err(e) => Err(LazyarpError::Network(e)),

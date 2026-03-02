@@ -71,10 +71,11 @@ pub struct AppState {
     pub filter_mode: bool,
     pub sweep_count: u64,
     pub rescan_notify: Arc<tokio::sync::Notify>,
+    pub passive_mode: bool,
 }
 
 impl AppState {
-    pub fn new(interface_name: String, rescan_notify: Arc<tokio::sync::Notify>) -> Self {
+    pub fn new(interface_name: String, rescan_notify: Arc<tokio::sync::Notify>, passive_mode: bool) -> Self {
         AppState {
             devices: HashMap::new(),
             scan_status: ScanStatus::Idle,
@@ -85,6 +86,7 @@ impl AppState {
             filter_mode: false,
             sweep_count: 0,
             rescan_notify,
+            passive_mode,
         }
     }
 
