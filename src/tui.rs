@@ -1,3 +1,4 @@
+use arboard::Clipboard;
 use crate::app::SharedState;
 use crate::network::port_scanner::scan_ports;
 use crate::ui::app_ui::render;
@@ -16,6 +17,7 @@ pub enum EventAction {
     Continue,
     Quit,
     TriggerPortScan(std::net::Ipv4Addr),
+    YankIp(std::net::Ipv4Addr),
 }
 
 pub async fn run(state: SharedState) -> anyhow::Result<()> {
@@ -79,6 +81,26 @@ async fn event_loop(
                             }
                             let port_count = open_ports.len();
                             s.push_log(format!("Port scan {ip}: {port_count} open port(s)"));
+                        });
+                    }
+                    EventAction::YankIp(ip) => {
+                        let state_clone = std::sync::Arc::clone(&state);
+                        tokio::task::spawn_blocking(move || {
+                            let ip_str = ip.to_string();
+                            match Clipboard::new().and_then(|mut cb| cb.set_text(&ip_str)) {
+                                Ok(_) => {
+                                    let rt = tokio::runtime::Handle::current();
+                                    rt.block_on(async {
+                                        state_clone.lock().await.push_log(format!("yanked {ip_str}"));
+                                    });
+                                }
+                                Err(e) => {
+                                    let rt = tokio::runtime::Handle::current();
+                                    rt.block_on(async {
+                                        state_clone.lock().await.push_log(format!("yank failed: {e}"));
+                                    });
+                                }
+                            }
                         });
                     }
                     EventAction::Continue => {}
@@ -190,6 +212,14 @@ async fn handle_event(event: Event, state: &SharedState) -> EventAction {
         KeyCode::Char('r') => {
             s.rescan_notify.notify_one();
             s.push_log("Manual rescan triggered".to_string());
+        }
+
+        KeyCode::Char('y') => {
+            if let Some(device) = s.selected_device() {
+                let ip = device.ip;
+                drop(s);
+                return EventAction::YankIp(ip);
+            }
         }
 
         _ => {}

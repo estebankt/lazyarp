@@ -56,6 +56,7 @@ sudo setcap cap_net_raw+eip ./target/release/lazyarp
 | key | action |
 |-----|--------|
 | `j` / `k` | navigate up/down |
+| `y` | yank selected IP to clipboard |
 | `/` | filter devices |
 | `Esc` | clear filter |
 | `r` | rescan now |

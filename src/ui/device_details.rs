@@ -98,7 +98,7 @@ pub fn render_device_details(f: &mut Frame, state: &AppState, area: Rect) {
 
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        "  Keys: j/k=navigate  /=filter  r=rescan  Enter=portscan  q=quit",
+        "  Keys: j/k=navigate  y=yank IP  /=filter  r=rescan  Enter=portscan  q=quit",
         Style::default()
             .fg(Color::DarkGray)
             .add_modifier(Modifier::DIM),
