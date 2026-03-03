@@ -5,8 +5,7 @@ use ratatui::{
 };
 
 use super::{
-    device_details::render_device_details,
-    device_list::render_device_list,
+    device_details::render_device_details, device_list::render_device_list,
     log_pane::render_log_pane,
 };
 

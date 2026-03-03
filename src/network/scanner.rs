@@ -84,19 +84,19 @@ async fn passive_sweep(iface: &SelectedInterface, state: SharedState) {
     tokio::time::sleep(Duration::from_secs(PASSIVE_PROBE_WAIT_SECS)).await;
 
     let iface_name = iface.name.clone();
-    let entries = tokio::task::spawn_blocking(move || {
-        crate::network::arp_cache::read_arp_cache(&iface_name)
-    })
-    .await
-    .unwrap_or_default();
+    let entries =
+        tokio::task::spawn_blocking(move || crate::network::arp_cache::read_arp_cache(&iface_name))
+            .await
+            .unwrap_or_default();
 
     {
         let mut s = state.lock().await;
         for (src_ip, src_mac) in entries {
             let vendor = lookup_vendor(&src_mac);
-            let entry = s.devices.entry(src_mac).or_insert_with(|| {
-                crate::app::Device::new(src_ip, src_mac, vendor.clone())
-            });
+            let entry = s
+                .devices
+                .entry(src_mac)
+                .or_insert_with(|| crate::app::Device::new(src_ip, src_mac, vendor.clone()));
             entry.ip = src_ip;
             entry.status = DeviceStatus::Active;
             entry.last_seen = chrono::Utc::now();
@@ -155,7 +155,11 @@ fn arp_sweep(
             s.scan_status = crate::app::ScanStatus::Scanning;
             s.sweep_count += 1;
             let sweep = s.sweep_count;
-            s.push_log(format!("Sweep #{sweep} started on {} ({} hosts)", iface.name, hosts.len()));
+            s.push_log(format!(
+                "Sweep #{sweep} started on {} ({} hosts)",
+                iface.name,
+                hosts.len()
+            ));
             for device in s.devices.values_mut() {
                 device.missed_sweeps += 1;
                 if device.missed_sweeps >= MISSED_SWEEPS_THRESHOLD {

@@ -1,0 +1,17 @@
+# Maintainer: <name> <email>
+pkgname=lazyarp
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="ARP-based network scanner with a terminal UI"
+arch=('x86_64')
+url="https://github.com/estebankt/lazyarp"
+license=('MIT')
+depends=('libpcap')
+source=("${pkgname}-v${pkgver}-x86_64-linux.tar.gz::${url}/releases/download/v${pkgver}/${pkgname}-v${pkgver}-x86_64-linux.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+    install -Dm755 "lazyarp" "${pkgdir}/usr/bin/lazyarp"
+    install -Dm644 "LICENSE"  "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+    install -Dm644 "README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+}

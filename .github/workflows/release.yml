@@ -1,0 +1,140 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-linux:
+    name: Build Linux (x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install libpcap
+        run: sudo apt-get install -y libpcap-dev
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Package tarball
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          tar czf "lazyarp-${TAG}-x86_64-linux.tar.gz" \
+            -C target/release lazyarp \
+            LICENSE README.md
+
+      - name: Build .deb
+        run: |
+          cargo install cargo-deb
+          cargo deb --no-build
+
+      - name: Build .rpm
+        run: |
+          cargo install cargo-generate-rpm
+          cargo generate-rpm
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: |
+            lazyarp-*-x86_64-linux.tar.gz
+            target/debian/*.deb
+            target/generate-rpm/*.rpm
+
+  build-macos-arm:
+    name: Build macOS (Apple Silicon)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-aarch64-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Package tarball
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          tar czf "lazyarp-${TAG}-aarch64-apple-darwin.tar.gz" \
+            -C target/release lazyarp \
+            LICENSE README.md
+
+      - name: Upload macOS ARM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-aarch64
+          path: lazyarp-*-aarch64-apple-darwin.tar.gz
+
+  build-macos-x86:
+    name: Build macOS (Intel)
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-x86_64-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Package tarball
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          tar czf "lazyarp-${TAG}-x86_64-apple-darwin.tar.gz" \
+            -C target/release lazyarp \
+            LICENSE README.md
+
+      - name: Upload macOS Intel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-x86_64
+          path: lazyarp-*-x86_64-apple-darwin.tar.gz
+
+  release:
+    name: Create GitHub Release
+    needs: [build-linux, build-macos-arm, build-macos-x86]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ github.event.head_commit.message }}
+          files: |
+            lazyarp-*-x86_64-linux.tar.gz
+            lazyarp-*-aarch64-apple-darwin.tar.gz
+            lazyarp-*-x86_64-apple-darwin.tar.gz
+            *.deb
+            *.rpm

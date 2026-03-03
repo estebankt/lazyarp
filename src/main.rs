@@ -9,12 +9,16 @@ use app::AppState;
 use error::LazyarpError;
 use network::interface::{check_permissions, select_interface};
 use network::scanner::{run_scanner, ScanMode};
-use pnet_datalink;
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
 
 #[tokio::main]
 async fn main() {
+    if std::env::args().any(|a| a == "--version" || a == "-V") {
+        println!("lazyarp {}", env!("CARGO_PKG_VERSION"));
+        std::process::exit(0);
+    }
+
     if let Err(e) = run().await {
         eprintln!("\nError: {e}");
         std::process::exit(1);

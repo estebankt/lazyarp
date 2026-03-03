@@ -15,10 +15,12 @@ pub enum DeviceStatus {
 #[derive(Debug, Clone)]
 pub struct Device {
     pub ip: Ipv4Addr,
+    #[allow(dead_code)]
     pub mac: [u8; 6],
     pub mac_str: String,
     pub vendor: Option<String>,
     pub status: DeviceStatus,
+    #[allow(dead_code)]
     pub first_seen: DateTime<Utc>,
     pub last_seen: DateTime<Utc>,
     pub missed_sweeps: u8,
@@ -75,7 +77,11 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(interface_name: String, rescan_notify: Arc<tokio::sync::Notify>, passive_mode: bool) -> Self {
+    pub fn new(
+        interface_name: String,
+        rescan_notify: Arc<tokio::sync::Notify>,
+        passive_mode: bool,
+    ) -> Self {
         AppState {
             devices: HashMap::new(),
             scan_status: ScanStatus::Idle,
@@ -129,6 +135,7 @@ impl AppState {
         self.selected_index.and_then(|i| visible.get(i).copied())
     }
 
+    #[allow(dead_code)]
     pub fn selected_mac(&self) -> Option<[u8; 6]> {
         self.selected_device().map(|d| d.mac)
     }
@@ -143,5 +150,140 @@ impl AppState {
                 None => 0,
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    fn make_state() -> AppState {
+        AppState::new(
+            "eth0".to_string(),
+            Arc::new(tokio::sync::Notify::new()),
+            false,
+        )
+    }
+
+    fn make_device(ip: &str, mac: [u8; 6], vendor: Option<&str>) -> Device {
+        Device::new(ip.parse().unwrap(), mac, vendor.map(|s| s.to_string()))
+    }
+
+    #[test]
+    fn visible_devices_empty() {
+        let state = make_state();
+        assert!(state.visible_devices().is_empty());
+    }
+
+    #[test]
+    fn visible_devices_sorted() {
+        let mut state = make_state();
+        state.devices.insert(
+            [0, 0, 0, 0, 0, 1],
+            make_device("192.168.1.10", [0, 0, 0, 0, 0, 1], None),
+        );
+        state.devices.insert(
+            [0, 0, 0, 0, 0, 2],
+            make_device("192.168.1.2", [0, 0, 0, 0, 0, 2], None),
+        );
+        state.devices.insert(
+            [0, 0, 0, 0, 0, 3],
+            make_device("192.168.1.5", [0, 0, 0, 0, 0, 3], None),
+        );
+
+        let visible = state.visible_devices();
+        assert_eq!(visible[0].ip.to_string(), "192.168.1.2");
+        assert_eq!(visible[1].ip.to_string(), "192.168.1.5");
+        assert_eq!(visible[2].ip.to_string(), "192.168.1.10");
+    }
+
+    #[test]
+    fn filter_by_ip() {
+        let mut state = make_state();
+        state.devices.insert(
+            [0, 0, 0, 0, 0, 1],
+            make_device("192.168.1.1", [0, 0, 0, 0, 0, 1], None),
+        );
+        state.devices.insert(
+            [0, 0, 0, 0, 0, 2],
+            make_device("10.0.0.1", [0, 0, 0, 0, 0, 2], None),
+        );
+        state.filter = "192".to_string();
+
+        let visible = state.visible_devices();
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].ip.to_string(), "192.168.1.1");
+    }
+
+    #[test]
+    fn filter_by_vendor() {
+        let mut state = make_state();
+        state.devices.insert(
+            [0, 0, 0, 0, 0, 1],
+            make_device("192.168.1.1", [0, 0, 0, 0, 0, 1], Some("Apple, Inc.")),
+        );
+        state.devices.insert(
+            [0, 0, 0, 0, 0, 2],
+            make_device("192.168.1.2", [0, 0, 0, 0, 0, 2], Some("Dell Inc.")),
+        );
+        state.filter = "apple".to_string();
+
+        let visible = state.visible_devices();
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].vendor.as_deref(), Some("Apple, Inc."));
+    }
+
+    #[test]
+    fn filter_by_mac() {
+        let mut state = make_state();
+        state.devices.insert(
+            [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF],
+            make_device("192.168.1.1", [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF], None),
+        );
+        state.devices.insert(
+            [0x11, 0x22, 0x33, 0x44, 0x55, 0x66],
+            make_device("192.168.1.2", [0x11, 0x22, 0x33, 0x44, 0x55, 0x66], None),
+        );
+        state.filter = "aa:bb".to_string();
+
+        let visible = state.visible_devices();
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].mac_str, "AA:BB:CC:DD:EE:FF");
+    }
+
+    #[test]
+    fn clamp_selection_empty() {
+        let mut state = make_state();
+        state.selected_index = Some(5);
+        state.clamp_selection();
+        assert_eq!(state.selected_index, None);
+    }
+
+    #[test]
+    fn clamp_selection_out_of_bounds() {
+        let mut state = make_state();
+        state.devices.insert(
+            [0, 0, 0, 0, 0, 1],
+            make_device("192.168.1.1", [0, 0, 0, 0, 0, 1], None),
+        );
+        state.devices.insert(
+            [0, 0, 0, 0, 0, 2],
+            make_device("192.168.1.2", [0, 0, 0, 0, 0, 2], None),
+        );
+        state.selected_index = Some(5);
+        state.clamp_selection();
+        assert_eq!(state.selected_index, Some(1));
+    }
+
+    #[test]
+    fn push_log_ring_buffer() {
+        let mut state = make_state();
+        for i in 0..250 {
+            state.push_log(format!("message {i}"));
+        }
+        assert_eq!(state.logs.len(), 200);
+        // The oldest messages were drained; last message should be the most recent
+        assert!(state.logs.last().unwrap().message.contains("249"));
     }
 }

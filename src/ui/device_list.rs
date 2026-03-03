@@ -43,7 +43,9 @@ pub fn render_device_list(f: &mut Frame, state: &AppState, area: Rect) {
                 Span::raw(" "),
                 Span::styled(
                     d.ip.to_string(),
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(vendor_str, Style::default().fg(Color::Gray)),
             ]);

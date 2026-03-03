@@ -2,6 +2,13 @@
 name = "lazyarp"
 version = "0.1.0"
 edition = "2021"
+description = "ARP-based network scanner with a terminal UI"
+license = "MIT"
+repository = "https://github.com/estebankt/lazyarp"
+homepage = "https://github.com/estebankt/lazyarp"
+keywords = ["network", "arp", "scanner", "tui", "cli"]
+categories = ["command-line-utilities", "network-programming"]
+include = ["src/**", "assets/oui.csv", "LICENSE", "README.md"]
 
 [dependencies]
 ratatui = "0.29"
@@ -23,3 +30,19 @@ arboard = "3"
 lto = true
 codegen-units = 1
 strip = true
+
+[package.metadata.deb]
+depends = "libpcap0.8"
+section = "net"
+assets = [
+    ["target/release/lazyarp", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/lazyarp/README.md", "644"],
+    ["LICENSE", "usr/share/doc/lazyarp/LICENSE", "644"],
+]
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/lazyarp", dest = "/usr/bin/lazyarp", mode = "755" },
+    { source = "README.md", dest = "/usr/share/doc/lazyarp/README.md", mode = "644" },
+    { source = "LICENSE", dest = "/usr/share/licenses/lazyarp/LICENSE", mode = "644" },
+]

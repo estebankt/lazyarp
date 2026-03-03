@@ -20,10 +20,7 @@ pub fn render_log_pane(f: &mut Frame, state: &AppState, area: Rect) {
     };
 
     let mode_tag = if state.passive_mode {
-        Span::styled(
-            " (passive) ",
-            Style::default().fg(Color::Cyan),
-        )
+        Span::styled(" (passive) ", Style::default().fg(Color::Cyan))
     } else {
         Span::raw("")
     };

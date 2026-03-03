@@ -1,7 +1,7 @@
-use arboard::Clipboard;
 use crate::app::SharedState;
 use crate::network::port_scanner::scan_ports;
 use crate::ui::app_ui::render;
+use arboard::Clipboard;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyCode, KeyModifiers},
     execute,

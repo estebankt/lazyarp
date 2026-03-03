@@ -54,15 +54,17 @@ pub fn select_interface() -> Result<SelectedInterface, LazyarpError> {
 
 fn is_virtual_interface(name: &str) -> bool {
     // Filter out macOS virtual/tunnel interfaces
-    let prefixes = ["utun", "awdl", "llw", "bridge", "vmnet", "veth", "docker", "lo"];
+    let prefixes = [
+        "utun", "awdl", "llw", "bridge", "vmnet", "veth", "docker", "lo",
+    ];
     prefixes.iter().any(|p| name.starts_with(p))
 }
 
 /// Check if we can open a raw socket (requires root or cap_net_raw).
 pub fn check_permissions(iface: &NetworkInterface) -> Result<(), LazyarpError> {
     use pnet_datalink::channel;
-    use pnet_datalink::Config;
     use pnet_datalink::ChannelType;
+    use pnet_datalink::Config;
 
     let config = Config {
         channel_type: ChannelType::Layer2,
@@ -100,7 +102,59 @@ pub fn subnet_hosts(base_ip: Ipv4Addr, prefix_len: u8) -> Vec<Ipv4Addr> {
         return Vec::new();
     }
 
-    (network + 1..broadcast)
-        .map(Ipv4Addr::from)
-        .collect()
+    (network + 1..broadcast).map(Ipv4Addr::from).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn subnet_hosts_slash24() {
+        let hosts = subnet_hosts("192.168.1.0".parse().unwrap(), 24);
+        assert_eq!(hosts.len(), 254);
+        assert_eq!(hosts[0], "192.168.1.1".parse::<Ipv4Addr>().unwrap());
+        assert_eq!(hosts[253], "192.168.1.254".parse::<Ipv4Addr>().unwrap());
+    }
+
+    #[test]
+    fn subnet_hosts_slash30() {
+        let hosts = subnet_hosts("10.0.0.0".parse().unwrap(), 30);
+        assert_eq!(hosts.len(), 2);
+        assert_eq!(hosts[0], "10.0.0.1".parse::<Ipv4Addr>().unwrap());
+        assert_eq!(hosts[1], "10.0.0.2".parse::<Ipv4Addr>().unwrap());
+    }
+
+    #[test]
+    fn subnet_hosts_slash16_boundary() {
+        let hosts = subnet_hosts("10.0.0.0".parse().unwrap(), 16);
+        assert_eq!(hosts.len(), 65534);
+    }
+
+    #[test]
+    fn subnet_hosts_too_large() {
+        // /15 = 131070 hosts, exceeds limit
+        let hosts = subnet_hosts("10.0.0.0".parse().unwrap(), 15);
+        assert!(hosts.is_empty());
+    }
+
+    #[test]
+    fn is_virtual_docker() {
+        assert!(is_virtual_interface("docker0"));
+    }
+
+    #[test]
+    fn is_virtual_veth() {
+        assert!(is_virtual_interface("veth0abc"));
+    }
+
+    #[test]
+    fn not_virtual_eth0() {
+        assert!(!is_virtual_interface("eth0"));
+    }
+
+    #[test]
+    fn not_virtual_wlan0() {
+        assert!(!is_virtual_interface("wlan0"));
+    }
 }

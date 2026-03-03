@@ -113,3 +113,46 @@ fn parse_mac(s: &str) -> Option<[u8; 6]> {
     }
     Some(mac)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_mac_lowercase_valid() {
+        let mac = parse_mac("aa:bb:cc:dd:ee:ff").unwrap();
+        assert_eq!(mac, [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]);
+    }
+
+    #[test]
+    fn parse_mac_uppercase_valid() {
+        let mac = parse_mac("AA:BB:CC:DD:EE:FF").unwrap();
+        assert_eq!(mac, [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
+    }
+
+    #[test]
+    fn parse_mac_too_short() {
+        assert!(parse_mac("aa:bb:cc").is_none());
+    }
+
+    #[test]
+    fn parse_mac_invalid_chars() {
+        assert!(parse_mac("xx:bb:cc:dd:ee:ff").is_none());
+    }
+
+    #[test]
+    fn parse_ipv4_valid() {
+        let ip = parse_ipv4("192.168.1.1").unwrap();
+        assert_eq!(ip, "192.168.1.1".parse::<Ipv4Addr>().unwrap());
+    }
+
+    #[test]
+    fn parse_ipv4_invalid() {
+        assert!(parse_ipv4("not-an-ip").is_none());
+    }
+
+    #[test]
+    fn parse_ipv4_out_of_range() {
+        assert!(parse_ipv4("999.999.999.999").is_none());
+    }
+}
