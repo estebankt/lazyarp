@@ -49,6 +49,27 @@ pub fn render_device_details(f: &mut Frame, state: &AppState, area: Rect) {
             ),
         ]),
         Line::from(vec![
+            Span::styled("  Hostname   : ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                device.hostname.as_deref().unwrap_or("—"),
+                Style::default().fg(Color::Cyan),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Device Type: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                device.device_type.as_str(),
+                Style::default().fg(Color::Yellow),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  OS         : ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                device.os_hint.as_deref().unwrap_or("—"),
+                Style::default().fg(Color::White),
+            ),
+        ]),
+        Line::from(vec![
             Span::styled("  Status     : ", Style::default().fg(Color::Gray)),
             Span::styled(status_str.0, Style::default().fg(status_str.1)),
         ]),
@@ -59,14 +80,34 @@ pub fn render_device_details(f: &mut Frame, state: &AppState, area: Rect) {
                 Style::default().fg(Color::White),
             ),
         ]),
-        Line::from(""),
-        Line::from(Span::styled(
-            "  Open Ports",
-            Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::UNDERLINED),
-        )),
     ];
+
+    // mDNS services
+    if !device.mdns_services.is_empty() {
+        lines.push(Line::from(vec![
+            Span::styled("  mDNS Svcs  : ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                device.mdns_services.join(", "),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]));
+    }
+
+    // HTTP/SSDP banner
+    if let Some(ref banner) = device.http_banner {
+        lines.push(Line::from(vec![
+            Span::styled("  Banner     : ", Style::default().fg(Color::Gray)),
+            Span::styled(banner.clone(), Style::default().fg(Color::DarkGray)),
+        ]));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  Open Ports",
+        Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::UNDERLINED),
+    )));
 
     if !device.port_scan_done {
         lines.push(Line::from(Span::styled(

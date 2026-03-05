@@ -25,29 +25,35 @@ pub fn render_device_list(f: &mut Frame, state: &AppState, area: Rect) {
                 DeviceStatus::Active => ("●", Color::Green),
                 DeviceStatus::Inactive => ("○", Color::DarkGray),
             };
-            let vendor_str = d
-                .vendor
+
+            let type_tag = d.device_type.tag();
+
+            // Prefer hostname over vendor for the display label
+            let truncate = |s: &str| -> String {
+                if s.chars().count() > 16 {
+                    let end = s.char_indices().nth(15).map(|(i, _)| i).unwrap_or(s.len());
+                    format!(" {}…", &s[..end])
+                } else {
+                    format!(" {s}")
+                }
+            };
+            let display_name = d
+                .hostname
                 .as_deref()
-                .map(|v| {
-                    // Truncate long vendor names
-                    if v.len() > 16 {
-                        format!(" {}…", &v[..15])
-                    } else {
-                        format!(" {v}")
-                    }
-                })
+                .map(truncate)
+                .or_else(|| d.vendor.as_deref().map(truncate))
                 .unwrap_or_default();
 
             let line = Line::from(vec![
                 Span::styled(bullet, Style::default().fg(bullet_color)),
-                Span::raw(" "),
+                Span::raw(format!("{type_tag} ")),
                 Span::styled(
                     d.ip.to_string(),
                     Style::default()
                         .fg(Color::White)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(vendor_str, Style::default().fg(Color::Gray)),
+                Span::styled(display_name, Style::default().fg(Color::Gray)),
             ]);
             ListItem::new(line)
         })

@@ -1,7 +1,8 @@
 use crate::app::SharedState;
-use crate::network::port_scanner::scan_ports;
+use crate::network::port_scanner::{
+    grab_http_banner, infer_device_type, infer_os_hint, scan_ports,
+};
 use crate::ui::app_ui::render;
-use arboard::Clipboard;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyCode, KeyModifiers},
     execute,
@@ -18,6 +19,31 @@ pub enum EventAction {
     Quit,
     TriggerPortScan(std::net::Ipv4Addr),
     YankIp(std::net::Ipv4Addr),
+}
+
+fn copy_to_clipboard(text: &str) -> Result<(), String> {
+    use std::io::Write;
+    let candidates: &[(&str, &[&str])] = &[
+        ("wl-copy", &[]),
+        ("xclip", &["-selection", "clipboard"]),
+        ("xsel", &["--clipboard", "--input"]),
+        ("pbcopy", &[]),
+        ("clip", &[]),
+    ];
+    for (cmd, args) in candidates {
+        if let Ok(mut child) = std::process::Command::new(cmd)
+            .args(*args)
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+        {
+            if let Some(stdin) = child.stdin.as_mut() {
+                let _ = stdin.write_all(text.as_bytes());
+            }
+            // Drop stdin so the child sees EOF, then don't wait (wl-copy must stay alive)
+            return Ok(());
+        }
+    }
+    Err("no clipboard tool found (install wl-clipboard, xclip, or xsel)".to_string())
 }
 
 pub async fn run(state: SharedState) -> anyhow::Result<()> {
@@ -70,10 +96,35 @@ async fn event_loop(
                         let state_clone = std::sync::Arc::clone(&state);
                         tokio::spawn(async move {
                             let open_ports = scan_ports(ip).await;
+
+                            // Grab HTTP banner if HTTP port is open
+                            let http_banner = if open_ports.contains(&80) {
+                                grab_http_banner(ip, 80).await
+                            } else if open_ports.contains(&8080) {
+                                grab_http_banner(ip, 8080).await
+                            } else {
+                                None
+                            };
+
                             let mut s = state_clone.lock().await;
-                            // Find device by IP and update ports
                             for device in s.devices.values_mut() {
                                 if device.ip == ip {
+                                    // Apply port-based device type inference
+                                    let vendor_hint = device.device_type.clone();
+                                    device.device_type =
+                                        infer_device_type(&open_ports, Some(vendor_hint));
+
+                                    // OS hint from ports + vendor
+                                    if device.os_hint.is_none() {
+                                        device.os_hint =
+                                            infer_os_hint(&open_ports, device.vendor.as_deref());
+                                    }
+
+                                    // Store HTTP banner
+                                    if device.http_banner.is_none() {
+                                        device.http_banner = http_banner.clone();
+                                    }
+
                                     device.open_ports = open_ports.clone();
                                     device.port_scan_done = true;
                                     break;
@@ -87,20 +138,14 @@ async fn event_loop(
                         let state_clone = std::sync::Arc::clone(&state);
                         tokio::task::spawn_blocking(move || {
                             let ip_str = ip.to_string();
-                            match Clipboard::new().and_then(|mut cb| cb.set_text(&ip_str)) {
-                                Ok(_) => {
-                                    let rt = tokio::runtime::Handle::current();
-                                    rt.block_on(async {
-                                        state_clone.lock().await.push_log(format!("yanked {ip_str}"));
-                                    });
+                            let result = copy_to_clipboard(&ip_str);
+                            let rt = tokio::runtime::Handle::current();
+                            rt.block_on(async {
+                                match result {
+                                    Ok(()) => state_clone.lock().await.push_log(format!("yanked {ip_str}")),
+                                    Err(e) => state_clone.lock().await.push_log(format!("yank failed: {e}")),
                                 }
-                                Err(e) => {
-                                    let rt = tokio::runtime::Handle::current();
-                                    rt.block_on(async {
-                                        state_clone.lock().await.push_log(format!("yank failed: {e}"));
-                                    });
-                                }
-                            }
+                            });
                         });
                     }
                     EventAction::Continue => {}

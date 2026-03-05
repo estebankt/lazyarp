@@ -24,7 +24,8 @@ once_cell = "1.21"
 chrono = { version = "0.4", features = ["clock"] }
 futures = "0.3"
 ipnetwork = "0.20"
-arboard = "3"
+dns-parser = "0.8"
+socket2 = "0.5"
 
 [profile.release]
 lto = true

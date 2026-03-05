@@ -12,6 +12,54 @@ pub enum DeviceStatus {
     Inactive,
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum DeviceType {
+    #[default]
+    Unknown,
+    Router,
+    Phone,
+    Computer,
+    #[allow(dead_code)]
+    Tablet,
+    Printer,
+    SmartTV,
+    IoT,
+    Nas,
+    AccessPoint,
+}
+
+impl DeviceType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            DeviceType::Unknown => "Unknown",
+            DeviceType::Router => "Router",
+            DeviceType::Phone => "Phone",
+            DeviceType::Computer => "Computer",
+            DeviceType::Tablet => "Tablet",
+            DeviceType::Printer => "Printer",
+            DeviceType::SmartTV => "Smart TV",
+            DeviceType::IoT => "IoT",
+            DeviceType::Nas => "NAS",
+            DeviceType::AccessPoint => "Access Point",
+        }
+    }
+
+    pub fn tag(&self) -> &'static str {
+        match self {
+            DeviceType::Unknown => "❓",
+            DeviceType::Router => "🌐",
+            DeviceType::Phone => "📱",
+            DeviceType::Computer => "💻",
+            DeviceType::Tablet => "📟",
+            DeviceType::Printer => "🖨",
+            DeviceType::SmartTV => "📺",
+            DeviceType::IoT => "💡",
+            DeviceType::Nas => "🗄",
+            DeviceType::AccessPoint => "📡",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Device {
     pub ip: Ipv4Addr,
@@ -26,6 +74,11 @@ pub struct Device {
     pub missed_sweeps: u8,
     pub open_ports: Vec<u16>,
     pub port_scan_done: bool,
+    pub hostname: Option<String>,
+    pub device_type: DeviceType,
+    pub mdns_services: Vec<String>,
+    pub os_hint: Option<String>,
+    pub http_banner: Option<String>,
 }
 
 impl Device {
@@ -46,6 +99,11 @@ impl Device {
             missed_sweeps: 0,
             open_ports: Vec::new(),
             port_scan_done: false,
+            hostname: None,
+            device_type: DeviceType::Unknown,
+            mdns_services: Vec::new(),
+            os_hint: None,
+            http_banner: None,
         }
     }
 }
@@ -113,6 +171,12 @@ impl AppState {
                         .unwrap_or("")
                         .to_lowercase()
                         .contains(&filter)
+                    || d.hostname
+                        .as_deref()
+                        .unwrap_or("")
+                        .to_lowercase()
+                        .contains(&filter)
+                    || d.device_type.as_str().to_lowercase().contains(&filter)
             })
             .collect();
         devices.sort_by_key(|d| d.ip.octets());
@@ -250,6 +314,23 @@ mod tests {
         let visible = state.visible_devices();
         assert_eq!(visible.len(), 1);
         assert_eq!(visible[0].mac_str, "AA:BB:CC:DD:EE:FF");
+    }
+
+    #[test]
+    fn filter_by_hostname() {
+        let mut state = make_state();
+        let mut d = make_device("192.168.1.1", [0, 0, 0, 0, 0, 1], None);
+        d.hostname = Some("iphone-mario".to_string());
+        state.devices.insert([0, 0, 0, 0, 0, 1], d);
+        state.devices.insert(
+            [0, 0, 0, 0, 0, 2],
+            make_device("192.168.1.2", [0, 0, 0, 0, 0, 2], None),
+        );
+        state.filter = "iphone".to_string();
+
+        let visible = state.visible_devices();
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].hostname.as_deref(), Some("iphone-mario"));
     }
 
     #[test]

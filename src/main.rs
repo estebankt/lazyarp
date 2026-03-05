@@ -66,7 +66,20 @@ async fn run() -> Result<(), anyhow::Error> {
         run_scanner(scanner_iface, scanner_state, mode).await;
     });
 
-    // 5. Run the TUI (blocks until user quits)
+    // 5. Spawn the mDNS passive listener
+    let mdns_state = Arc::clone(&state);
+    let iface_ip = selected.ip;
+    tokio::spawn(async move {
+        network::mdns::run_mdns_listener(mdns_state, iface_ip).await;
+    });
+
+    // 6. Spawn the SSDP/UPnP listener
+    let ssdp_state = Arc::clone(&state);
+    tokio::spawn(async move {
+        network::ssdp::run_ssdp_listener(ssdp_state).await;
+    });
+
+    // 7. Run the TUI (blocks until user quits)
     tui::run(state).await?;
 
     Ok(())

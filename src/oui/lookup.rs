@@ -1,3 +1,4 @@
+use crate::app::DeviceType;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 
@@ -31,6 +32,52 @@ pub fn lookup_vendor(mac: &[u8; 6]) -> Option<String> {
     OUI_MAP.get(&prefix).cloned()
 }
 
+/// Infer a device type from the vendor/manufacturer name.
+pub fn vendor_device_hint(vendor: &str) -> Option<DeviceType> {
+    let v = vendor.to_lowercase();
+
+    if v.contains("raspberry pi") {
+        return Some(DeviceType::Computer);
+    }
+    if v.contains("tp-link")
+        || v.contains("netgear")
+        || v.contains("asus")
+        || v.contains("cisco")
+        || v.contains("ubiquiti")
+        || v.contains("mikrotik")
+        || v.contains("zyxel")
+        || v.contains("d-link")
+        || v.contains("belkin")
+        || v.contains("linksys")
+    {
+        return Some(DeviceType::Router);
+    }
+    if v.contains("canon")
+        || v.contains("hewlett packard")
+        || v.contains("hp inc")
+        || v.contains("brother")
+        || v.contains("epson")
+        || v.contains("lexmark")
+        || v.contains("xerox")
+        || v.contains("ricoh")
+        || v.contains("samsung print")
+    {
+        return Some(DeviceType::Printer);
+    }
+    if v.contains("synology")
+        || v.contains("qnap")
+        || v.contains("buffalo")
+        || v.contains("western digital")
+    {
+        return Some(DeviceType::Nas);
+    }
+    if v.contains("nest labs") || v.contains("ring") {
+        return Some(DeviceType::IoT);
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -62,5 +109,45 @@ mod tests {
         let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
         // This may or may not be in the map; just assert no panic
         let _ = lookup_vendor(&mac);
+    }
+
+    #[test]
+    fn vendor_hint_router() {
+        assert_eq!(
+            vendor_device_hint("TP-Link Technologies"),
+            Some(DeviceType::Router)
+        );
+        assert_eq!(vendor_device_hint("Netgear Inc."), Some(DeviceType::Router));
+        assert_eq!(vendor_device_hint("ASUS"), Some(DeviceType::Router));
+    }
+
+    #[test]
+    fn vendor_hint_printer() {
+        assert_eq!(vendor_device_hint("Canon Inc."), Some(DeviceType::Printer));
+        assert_eq!(vendor_device_hint("HP Inc"), Some(DeviceType::Printer));
+        assert_eq!(
+            vendor_device_hint("Epson America"),
+            Some(DeviceType::Printer)
+        );
+    }
+
+    #[test]
+    fn vendor_hint_nas() {
+        assert_eq!(vendor_device_hint("Synology Inc."), Some(DeviceType::Nas));
+        assert_eq!(vendor_device_hint("QNAP Systems"), Some(DeviceType::Nas));
+    }
+
+    #[test]
+    fn vendor_hint_unknown() {
+        assert_eq!(vendor_device_hint("Apple, Inc."), None);
+        assert_eq!(vendor_device_hint("Samsung Electronics"), None);
+    }
+
+    #[test]
+    fn vendor_hint_raspberry_pi() {
+        assert_eq!(
+            vendor_device_hint("Raspberry Pi Foundation"),
+            Some(DeviceType::Computer)
+        );
     }
 }

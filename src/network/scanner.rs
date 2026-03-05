@@ -1,6 +1,6 @@
 use crate::app::{DeviceStatus, SharedState};
 use crate::network::interface::{subnet_hosts, SelectedInterface};
-use crate::oui::lookup::lookup_vendor;
+use crate::oui::lookup::{lookup_vendor, vendor_device_hint};
 use pnet_datalink::{self, Channel, Config, MacAddr};
 use pnet_packet::arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket};
 use pnet_packet::ethernet::{EtherTypes, EthernetPacket, MutableEthernetPacket};
@@ -93,10 +93,15 @@ async fn passive_sweep(iface: &SelectedInterface, state: SharedState) {
         let mut s = state.lock().await;
         for (src_ip, src_mac) in entries {
             let vendor = lookup_vendor(&src_mac);
-            let entry = s
-                .devices
-                .entry(src_mac)
-                .or_insert_with(|| crate::app::Device::new(src_ip, src_mac, vendor.clone()));
+            let entry = s.devices.entry(src_mac).or_insert_with(|| {
+                let mut d = crate::app::Device::new(src_ip, src_mac, vendor.clone());
+                if let Some(v) = vendor.as_deref() {
+                    if let Some(hint) = vendor_device_hint(v) {
+                        d.device_type = hint;
+                    }
+                }
+                d
+            });
             entry.ip = src_ip;
             entry.status = DeviceStatus::Active;
             entry.last_seen = chrono::Utc::now();
@@ -186,7 +191,13 @@ fn arp_sweep(
                     rt.block_on(async {
                         let mut s = state.lock().await;
                         let entry = s.devices.entry(src_mac).or_insert_with(|| {
-                            crate::app::Device::new(src_ip, src_mac, vendor.clone())
+                            let mut d = crate::app::Device::new(src_ip, src_mac, vendor.clone());
+                            if let Some(v) = vendor.as_deref() {
+                                if let Some(hint) = vendor_device_hint(v) {
+                                    d.device_type = hint;
+                                }
+                            }
+                            d
                         });
                         entry.ip = src_ip;
                         entry.status = DeviceStatus::Active;
